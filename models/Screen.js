@@ -32,6 +32,11 @@ Screen.init({
     seats_per_row: {
         type: DataTypes.INTEGER,
         allowNull: false
+    },
+    status: {
+        type: DataTypes.ENUM('active', 'inactive', 'maintenance'),
+        defaultValue: 'active',
+        allowNull: false
     }
 }, {
     sequelize,

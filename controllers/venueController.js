@@ -1,7 +1,8 @@
 const Venue = require('../models/Venue');
-const Event = require('../models/event');
+const Event = require('../models/Event');
 const Category = require('../models/Category');
-const Screen = require('../models/Screen'); // Add this import
+const Screen = require('../models/Screen');
+const Seat = require('../models/Seat'); // Add this import
 const { Op } = require('sequelize');
 const path = require('path');
 
@@ -32,6 +33,7 @@ const getVenues = async (req, res) => {
 };
 
 // Get single venue
+// Update getVenue function
 const getVenue = async (req, res) => {
   try {
     const venue = await Venue.findByPk(req.params.id, {
@@ -46,7 +48,7 @@ const getVenue = async (req, res) => {
         }]
       }],
       attributes: {
-        include: ['venue_id', 'name', 'address', 'location', 'capacity', 'description', 'image_url', 'images'],
+        include: ['venue_id', 'name', 'address', 'city', 'capacity', 'description', 'image_url', 'images'],
         exclude: ['createdAt', 'updatedAt']
       }
     });
@@ -86,33 +88,62 @@ const createVenue = async (req, res) => {
     if (req.files && req.files.length > 0) {
       venueData.images = req.files.map(file => `/uploads/venues/${file.filename}`);
     }
-    // Add admin_id from authenticated user
+
+    // Add both admin_id and managed_venue_id
     venueData.admin_id = req.user.user_id;
-    // Create venue with transaction to ensure data consistency
     const venue = await Venue.create(venueData);
-    // Create screens for the venue
+
+    // Update the user's managed_venue_id
+    const User = require('../models/User');
+    await User.update(
+      { managed_venue_id: venue.venue_id },
+      { where: { user_id: req.user.user_id } }
+    );
     if (screens && Array.isArray(screens)) {
-      const createdScreens = await Promise.all(screens.map(screenData =>
-        Screen.create({
+      // Create screens and their seats
+      for (const screenData of screens) {
+        const screen = await Screen.create({
           venue_id: venue.venue_id,
           name: screenData.name.trim(),
           capacity: screenData.capacity,
           rows: screenData.rows,
           seats_per_row: screenData.seats_per_row,
-          base_price: screenData.base_price || 0,
           status: 'active'
-        })
-      ));
+        });
+
+        // Create seats for each row and column using letters
+        const seatPromises = [];
+        for (let row = 0; row < screenData.rows; row++) {
+          const rowLetter = String.fromCharCode(65 + row); // Convert number to letter (A=65, B=66, etc.)
+          for (let seatNum = 1; seatNum <= screenData.seats_per_row; seatNum++) {
+            seatPromises.push(Seat.create({
+              screen_id: screen.screen_id,
+              row_number: rowLetter,
+              seat_number: seatNum,
+              status: 'available'
+            }));
+          }
+        }
+        await Promise.all(seatPromises);
+      }
+
+      // Fetch venue with screens and seats
       const venueWithScreens = await Venue.findByPk(venue.venue_id, {
         include: [{
           model: Screen,
           as: 'screens',
-          attributes: ['screen_id', 'name', 'capacity', 'rows', 'seats_per_row', 'base_price', 'status']
+          attributes: ['screen_id', 'name', 'capacity', 'rows', 'seats_per_row', 'status'],
+          include: [{
+            model: Seat,
+            as: 'seats',
+            attributes: ['seat_id', 'row_number', 'seat_number', 'status']
+          }]
         }]
       });
+
       res.status(201).json({
         success: true,
-        message: 'Venue and screens created successfully',
+        message: 'Venue, screens, and seats created successfully',
         data: venueWithScreens
       });
     }

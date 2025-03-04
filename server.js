@@ -60,13 +60,17 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocs));
 // Enable CORS
 // Update CORS configuration
 const corsOptions = {
-  origin: ['http://localhost:3000', 'http://localhost:5000'],
+  origin: ['http://localhost:3000', 'http://localhost:5000', 'http://localhost:5173'],
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Access-Control-Allow-Origin'],
+  exposedHeaders: ['Content-Range', 'X-Content-Range']
 };
 
 app.use(cors(corsOptions));
+
+// Add pre-flight handling
+app.options('*', cors(corsOptions));
 // Ensure this middleware comes before your routes
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
