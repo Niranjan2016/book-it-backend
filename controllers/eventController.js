@@ -1,4 +1,4 @@
-const Event = require('../models/event');
+const Event = require('../models/Event');
 const Category = require('../models/Category');
 const Venue = require('../models/Venue');  // Add this import
 const Screen = require('../models/Screen');
@@ -47,56 +47,7 @@ async function getEvent(req, res) {
     }
 }
 
-// Get single event
-async function getEvent(req, res) {
-    try {
-        console.log('Fetching event with ID:', req.params.id);
 
-        // First, check if show times exist for this event
-        const showTimes = await ShowTime.findAll({
-            where: { event_id: req.params.id },
-            raw: true
-        });
-        console.log('Show times in database:', showTimes);
-
-        const event = await Event.findByPk(req.params.id, {
-            include: [
-                {
-                    model: Category,
-                    as: 'category',
-                    attributes: ['category_id', 'name', 'description']
-                },
-                {
-                    model: Venue,
-                    as: 'venue',
-                    attributes: ['venue_id', 'name', 'address']
-                },
-                {
-                    model: ShowTime,
-                    as: 'showTimes',
-                    separate: true, // Try loading show times separately
-                    include: [{
-                        model: Screen,
-                        as: 'screen',
-                        attributes: ['screen_id', 'name', 'capacity']
-                    }]
-                }
-            ]
-        });
-
-        if (!event) {
-            return res.status(404).json({ message: 'Event not found' });
-        }
-
-        // Debug log
-        console.log('Show times in event:', event.showTimes);
-
-        res.status(200).json(event);
-    } catch (error) {
-        console.error('Error in getEvent:', error);
-        res.status(500).json({ message: error.message });
-    }
-}
 
 // Update getAdminEvents similarly
 const getAdminEvents = async (req, res) => {
@@ -133,9 +84,14 @@ const getAdminEvents = async (req, res) => {
                     attributes: ['showtime_id', 'show_date', 'start_time', 'available_seats']
                 }
             ],
-            attributes: {
-                include: ['event_id', 'event_name', 'ticket_price']
-            },
+            attributes: [
+                'event_id',
+                'event_name',
+                'event_date',
+                'ticket_price',
+                'available_seats',
+                'image_url'
+            ],
             order: [['event_date', 'ASC']]
         });
 
@@ -157,20 +113,27 @@ const createEvent = async (req, res) => {
     try {
         const { start_date, end_date, show_times, ...eventData } = req.body;
 
-        // Debug the incoming data
-        console.log('Received data:', {
-            start_date,
-            end_date,
-            show_times,
-            eventData
-        });
-
-        // Create the main event
-        const event = await Event.create(eventData);
-
         // Parse show_times if it's a string
         const parsedShowTimes = typeof show_times === 'string' ?
             JSON.parse(show_times) : show_times;
+
+        // Add show_times to eventData and only include necessary fields
+        const eventToCreate = {
+            event_name: eventData.event_name,
+            event_date: eventData.event_date,
+            ticket_price: eventData.ticket_price,
+            available_seats: eventData.available_seats,
+            image_url: eventData.image_url,
+            venue_id: eventData.venue_id,
+            category_id: eventData.category_id,
+            screen_id: eventData.screen_id,
+            show_times: JSON.stringify(parsedShowTimes)
+        };
+
+        // Create the main event
+        const event = await Event.create(eventToCreate);
+
+        console.log(parsedShowTimes);
         if (start_date && end_date && parsedShowTimes && Array.isArray(parsedShowTimes)) {
             const startDate = new Date(start_date);
             const endDate = new Date(end_date);
@@ -230,12 +193,24 @@ const createEvent = async (req, res) => {
 
         // Fetch and verify created event with show times
         const createdEvent = await Event.findByPk(event.event_id, {
+            attributes: [
+                'event_id',
+                'event_name',
+                'event_date',
+                'ticket_price',
+                'available_seats',
+                'image_url',
+                'venue_id',
+                'category_id',
+                'screen_id',
+                'show_times'
+            ],
             include: [{
                 model: ShowTime,
                 as: 'showTimes',
                 include: [{
                     model: Screen,
-                    as: 'screen',  // Add the correct alias for Screen
+                    as: 'screen',
                     attributes: ['screen_id', 'name']
                 }]
             }]
@@ -265,44 +240,46 @@ const createEvent = async (req, res) => {
 // Update getEvents function to include show times 
 
 // Update getEvents function
-async function getEvents(req, res) {
+const getEvents = async (req, res) => {
     try {
-        console.log('Starting getEvents...');
         const events = await Event.findAll({
-            attributes: ['event_id', 'event_name', 'event_date', 'ticket_price', 'available_seats'],
             include: [
                 {
                     model: Category,
                     as: 'category',
-                    attributes: ['category_id', 'name'],
-                    required: false
+                    attributes: ['category_id', 'name']
                 },
                 {
                     model: Venue,
                     as: 'venue',
-                    attributes: ['venue_id', 'name', 'address'],
-                    required: false
+                    attributes: ['venue_id', 'name', 'address']
+                },
+                {
+                    model: Screen,
+                    as: 'eventScreen',
+                    attributes: ['screen_id', 'name', 'capacity']
                 },
                 {
                     model: ShowTime,
                     as: 'showTimes',
-                    attributes: ['showtime_id', 'show_date', 'start_time', 'available_seats'],
-                    required: false,
-                    include: [{
-                        model: Screen,
-                        as: 'screen',
-                        attributes: ['screen_id', 'name', 'capacity']
-                    }]
+                    attributes: ['showtime_id', 'show_date', 'start_time', 'available_seats']
                 }
+            ],
+            attributes: [
+                'event_id',
+                'event_name',
+                'event_date',
+                'ticket_price',
+                'available_seats',
+                'image_url'
             ]
         });
-        console.log(`Successfully fetched ${events.length} events`);
         res.status(200).json(events);
     } catch (error) {
         console.error('Error in getEvents:', error);
         res.status(500).json({ message: error.message });
     }
-}
+};
 
 // Update event
 async function updateEvent(req, res) {
@@ -378,16 +355,24 @@ async function getShowTimeSeats(req, res) {
                 showtime_id: showTimeId,
                 event_id: eventId
             },
+            attributes: [
+                'showtime_id',
+                'show_date',
+                'start_time',
+                'available_seats',
+                'screen_id',
+                'event_id'
+            ],
             include: [
                 {
                     model: Screen,
                     as: 'screen',
-                    attributes: ['screen_id', 'name', 'capacity']
+                    attributes: ['screen_id', 'name', 'capacity', 'status']
                 },
                 {
                     model: Event,
                     as: 'event',
-                    attributes: ['event_id', 'event_name']
+                    attributes: ['event_id', 'event_name', 'ticket_price']
                 }
             ]
         });
@@ -398,7 +383,113 @@ async function getShowTimeSeats(req, res) {
             });
         }
 
-        res.status(200).json(showTime);
+        // Calculate booked seats
+        const bookedSeats = showTime.screen.capacity - showTime.available_seats;
+
+        // Calculate total seats and rows based on screen capacity
+        const totalCapacity = showTime.screen.capacity;
+        const seatsPerRow = 12; // Standard seats per row
+        const totalRows = Math.ceil(totalCapacity / seatsPerRow);
+
+        // Define categories from front to back (front = cheaper, back = premium)
+        const seatCategories = [
+            { 
+                name: 'BRONZE', // Front rows (closest to screen)
+                percentage: 0.4, // 40% of rows
+                price: showTime.event.ticket_price * 0.8,
+                seatsPerRow
+            },
+            { 
+                name: 'SILVER', // Middle rows
+                percentage: 0.35, // 35% of rows
+                price: showTime.event.ticket_price,
+                seatsPerRow
+            },
+            { 
+                name: 'GOLD', // Back rows (premium)
+                percentage: 0.25, // 25% of rows
+                price: showTime.event.ticket_price * 1.5,
+                seatsPerRow
+            }
+        ];
+
+        // Calculate rows for each category
+        seatCategories.forEach(category => {
+            category.rows = Math.ceil(totalRows * category.percentage);
+            category.totalSeats = category.rows * category.seatsPerRow;
+        });
+
+        const seatLayout = [];
+        let currentRowLabel = 'A';
+        let totalSeatsCount = 0;
+
+        // Generate layout from front to back
+        seatCategories.forEach(category => {
+            const categoryRows = [];
+            
+            for (let row = 0; row < category.rows; row++) {
+                const rowSeats = [];
+                const actualSeatsInRow = Math.min(
+                    category.seatsPerRow,
+                    totalCapacity - totalSeatsCount
+                );
+
+                if (actualSeatsInRow <= 0) break;
+
+                for (let seat = 0; seat < actualSeatsInRow; seat++) {
+                    const seatNumber = totalSeatsCount + seat + 1;
+                    rowSeats.push({
+                        seatId: seatNumber,
+                        rowLabel: currentRowLabel,
+                        seatNumber: seat + 1,
+                        status: seatNumber <= bookedSeats ? 'booked' : 'available',
+                        price: category.price,
+                        category: category.name,
+                        distanceFromScreen: currentRowLabel
+                    });
+                }
+
+                if (rowSeats.length > 0) {
+                    categoryRows.push({
+                        rowNumber: currentRowLabel.charCodeAt(0) - 64,
+                        rowLabel: currentRowLabel,
+                        seats: rowSeats,
+                        distanceFromScreen: `Row ${currentRowLabel}`
+                    });
+                    currentRowLabel = String.fromCharCode(currentRowLabel.charCodeAt(0) + 1);
+                }
+
+                totalSeatsCount += actualSeatsInRow;
+            }
+
+            if (categoryRows.length > 0) {
+                seatLayout.push({
+                    categoryName: category.name,
+                    basePrice: category.price,
+                    rows: categoryRows,
+                    position: category.name === 'BRONZE' ? 'Front' : 
+                             category.name === 'SILVER' ? 'Middle' : 'Back'
+                });
+            }
+        });
+
+        // Add additional seat information to the response
+        const response = {
+            ...showTime.toJSON(),
+            seats: {
+                totalCapacity: showTime.screen.capacity,
+                availableSeats: showTime.available_seats,
+                bookedSeats: bookedSeats,
+                occupancyRate: ((bookedSeats / showTime.screen.capacity) * 100).toFixed(2) + '%',
+                categories: seatCategories.map(cat => ({
+                    name: cat.name,
+                    basePrice: cat.price
+                })),
+                layout: seatLayout
+            }
+        };
+
+        res.status(200).json(response);
     } catch (error) {
         console.error('Error in getShowTimeSeats:', error);
         res.status(500).json({ message: error.message });
@@ -500,6 +591,30 @@ async function getEventsByCategory(req, res) {
     }
 }
 
+const getVenues = async (req, res) => {
+    try {
+        const venues = await Venue.findAll({
+            attributes: ['venue_id', 'name', 'address', 'capacity', 'description', 'image_url', 'images'],
+            include: [{
+                model: Event,
+                as: 'events',
+                attributes: [
+                    'event_id', 'event_name', 'event_date',
+                    'ticket_price', 'available_seats', 'image_url'
+                ],
+                include: [{
+                    model: Screen,
+                    as: 'eventScreen',  // Changed from 'screen' to 'eventScreen'
+                    attributes: ['screen_id', 'name', 'capacity']
+                }]
+            }]
+        });
+        res.status(200).json(venues);
+    } catch (error) {
+        console.error('Error fetching venues:', error);
+        res.status(500).json({ message: error.message });
+    }
+};
 // Update the module.exports to include the new function
 module.exports = {
     getEvents,
@@ -512,5 +627,5 @@ module.exports = {
     getFilteredEvents,
     getEventsByCategory,
     getAdminEvents,
-    getShowTimeSeats
+    getShowTimeSeats, getVenues
 };

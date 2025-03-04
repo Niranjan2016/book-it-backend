@@ -13,9 +13,13 @@ Event.init({
         type: DataTypes.STRING,
         allowNull: false
     },
+    description: {
+        type: DataTypes.TEXT,
+        allowNull: true
+    },
     category_id: {
         type: DataTypes.INTEGER,
-        allowNull: false,
+        allowNull: true,
         references: {
             model: 'categories',
             key: 'category_id'
