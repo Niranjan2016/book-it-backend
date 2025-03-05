@@ -30,11 +30,11 @@ const authorize = (allowedRoles) => {
             // Add user info to request
             req.user = user;
 
-            console.log('Debug Info:', {
-                decodedToken: decoded,
-                requiredRoles: roles,
-                userRole: user.role
-            });
+            // console.log('Debug Info:', {
+            //     decodedToken: decoded,
+            //     requiredRoles: roles,
+            //     userRole: user.role
+            // });
 
             if (!roles.includes(user.role)) {
                 return res.status(403).json({

@@ -1,10 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const screenController = require('../controllers/screencontroller');
-const { authorize } = require('../middleware/authmiddleware');
+const { authenticateToken, isVenueAdmin } = require('../middleware/auth');
 
-router.get('/venue/:venueId', screenController.getVenueScreens);
-router.post('/', authorize('venue_admin'), screenController.createScreen);
-router.put('/:id', authorize('venue_admin'), screenController.updateScreen);
+router.post('/:screenId/categories', authenticateToken, isVenueAdmin, screenController.addSeatCategories);
+router.put('/:screenId/categories', authenticateToken, isVenueAdmin, screenController.updateSeatCategories);
 
 module.exports = router;

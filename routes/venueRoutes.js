@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const venueController = require('../controllers/venuecontroller');
+const venueController = require('../controllers/venueController');
 const { authorize } = require('../middleware/authmiddleware');
 const multer = require('multer');
 const path = require('path');

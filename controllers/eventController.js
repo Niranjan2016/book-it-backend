@@ -4,6 +4,7 @@ const Venue = require('../models/Venue');  // Add this import
 const Screen = require('../models/Screen');
 const { Op } = require('sequelize');
 const ShowTime = require('../models/ShowTime');
+const SeatCategory = require('../models/SeatCategory');
 
 // Update getEvent function to include show times
 async function getEvent(req, res) {
@@ -355,19 +356,16 @@ async function getShowTimeSeats(req, res) {
                 showtime_id: showTimeId,
                 event_id: eventId
             },
-            attributes: [
-                'showtime_id',
-                'show_date',
-                'start_time',
-                'available_seats',
-                'screen_id',
-                'event_id'
-            ],
             include: [
                 {
                     model: Screen,
                     as: 'screen',
-                    attributes: ['screen_id', 'name', 'capacity', 'status']
+                    attributes: ['screen_id', 'name', 'capacity', 'status'],
+                    include: [{
+                        model: SeatCategory,
+                        as: 'seatCategories',
+                        attributes: ['category_id', 'name', 'price_multiplier', 'rows_from', 'rows_to', 'seats_per_row', 'position']
+                    }]
                 },
                 {
                     model: Event,
@@ -378,60 +376,57 @@ async function getShowTimeSeats(req, res) {
         });
 
         if (!showTime) {
-            return res.status(404).json({
-                message: 'Show time not found for this event'
-            });
+            return res.status(404).json({ message: 'Show time not found' });
         }
 
-        // Calculate booked seats
         const bookedSeats = showTime.screen.capacity - showTime.available_seats;
-
-        // Calculate total seats and rows based on screen capacity
-        const totalCapacity = showTime.screen.capacity;
-        const seatsPerRow = 12; // Standard seats per row
-        const totalRows = Math.ceil(totalCapacity / seatsPerRow);
-
-        // Define categories from front to back (front = cheaper, back = premium)
-        const seatCategories = [
-            { 
-                name: 'BRONZE', // Front rows (closest to screen)
-                percentage: 0.4, // 40% of rows
-                price: showTime.event.ticket_price * 0.8,
-                seatsPerRow
-            },
-            { 
-                name: 'SILVER', // Middle rows
-                percentage: 0.35, // 35% of rows
-                price: showTime.event.ticket_price,
-                seatsPerRow
-            },
-            { 
-                name: 'GOLD', // Back rows (premium)
-                percentage: 0.25, // 25% of rows
-                price: showTime.event.ticket_price * 1.5,
-                seatsPerRow
-            }
-        ];
-
-        // Calculate rows for each category
-        seatCategories.forEach(category => {
-            category.rows = Math.ceil(totalRows * category.percentage);
-            category.totalSeats = category.rows * category.seatsPerRow;
-        });
-
         const seatLayout = [];
-        let currentRowLabel = 'A';
         let totalSeatsCount = 0;
 
-        // Generate layout from front to back
-        seatCategories.forEach(category => {
+        // Default categories if none are configured
+        let categories = showTime.screen.seatCategories;
+        if (!categories || categories.length === 0) {
+            const totalRows = Math.ceil(showTime.screen.capacity / 12); // 12 seats per row
+            categories = [
+                {
+                    name: 'BRONZE',
+                    price_multiplier: 0.8,
+                    rows_from: 1,
+                    rows_to: Math.ceil(totalRows * 0.4),
+                    seats_per_row: 12,
+                    position: 'FRONT'
+                },
+                {
+                    name: 'SILVER',
+                    price_multiplier: 1.0,
+                    rows_from: Math.ceil(totalRows * 0.4) + 1,
+                    rows_to: Math.ceil(totalRows * 0.75),
+                    seats_per_row: 12,
+                    position: 'MIDDLE'
+                },
+                {
+                    name: 'GOLD',
+                    price_multiplier: 1.5,
+                    rows_from: Math.ceil(totalRows * 0.75) + 1,
+                    rows_to: totalRows,
+                    seats_per_row: 12,
+                    position: 'BACK'
+                }
+            ];
+        }
+
+        // Sort categories by rows_from
+        const sortedCategories = categories.sort((a, b) => a.rows_from - b.rows_from);
+
+        sortedCategories.forEach(category => {
             const categoryRows = [];
+            const rowCount = category.rows_to - category.rows_from + 1;
             
-            for (let row = 0; row < category.rows; row++) {
+            for (let row = 0; row < rowCount; row++) {
                 const rowSeats = [];
                 const actualSeatsInRow = Math.min(
-                    category.seatsPerRow,
-                    totalCapacity - totalSeatsCount
+                    category.seats_per_row,
+                    showTime.screen.capacity - totalSeatsCount
                 );
 
                 if (actualSeatsInRow <= 0) break;
@@ -440,23 +435,21 @@ async function getShowTimeSeats(req, res) {
                     const seatNumber = totalSeatsCount + seat + 1;
                     rowSeats.push({
                         seatId: seatNumber,
-                        rowLabel: currentRowLabel,
+                        rowLabel: String.fromCharCode(65 + category.rows_from + row - 1),
                         seatNumber: seat + 1,
                         status: seatNumber <= bookedSeats ? 'booked' : 'available',
-                        price: category.price,
+                        price: showTime.event.ticket_price * category.price_multiplier,
                         category: category.name,
-                        distanceFromScreen: currentRowLabel
+                        position: category.position
                     });
                 }
 
                 if (rowSeats.length > 0) {
                     categoryRows.push({
-                        rowNumber: currentRowLabel.charCodeAt(0) - 64,
-                        rowLabel: currentRowLabel,
-                        seats: rowSeats,
-                        distanceFromScreen: `Row ${currentRowLabel}`
+                        rowNumber: category.rows_from + row,
+                        rowLabel: String.fromCharCode(65 + category.rows_from + row - 1),
+                        seats: rowSeats
                     });
-                    currentRowLabel = String.fromCharCode(currentRowLabel.charCodeAt(0) + 1);
                 }
 
                 totalSeatsCount += actualSeatsInRow;
@@ -465,15 +458,13 @@ async function getShowTimeSeats(req, res) {
             if (categoryRows.length > 0) {
                 seatLayout.push({
                     categoryName: category.name,
-                    basePrice: category.price,
+                    basePrice: showTime.event.ticket_price * category.price_multiplier,
                     rows: categoryRows,
-                    position: category.name === 'BRONZE' ? 'Front' : 
-                             category.name === 'SILVER' ? 'Middle' : 'Back'
+                    position: category.position
                 });
             }
         });
 
-        // Add additional seat information to the response
         const response = {
             ...showTime.toJSON(),
             seats: {
@@ -481,9 +472,10 @@ async function getShowTimeSeats(req, res) {
                 availableSeats: showTime.available_seats,
                 bookedSeats: bookedSeats,
                 occupancyRate: ((bookedSeats / showTime.screen.capacity) * 100).toFixed(2) + '%',
-                categories: seatCategories.map(cat => ({
+                categories: categories.map(cat => ({
                     name: cat.name,
-                    basePrice: cat.price
+                    basePrice: showTime.event.ticket_price * cat.price_multiplier,
+                    position: cat.position
                 })),
                 layout: seatLayout
             }
