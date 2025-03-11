@@ -9,7 +9,7 @@ const SeatCategory = require('../models/SeatCategory');
 
 // Get all venues
 const getVenues = async (req, res) => {
-  console.log(req.user);
+  // console.log(req.user);
   try {
     const venues = await Venue.findAll({
       attributes: ['venue_id', 'name', 'address', 'capacity', 'description', 'image_url', 'images'],

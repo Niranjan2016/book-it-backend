@@ -26,7 +26,7 @@ app.use(express.urlencoded({ extended: true }));
 // Simple logging middleware to debug requests
 app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
-  console.log('Headers:', req.headers);
+  // console.log('Response:', res.data);
   next();
 });
 
