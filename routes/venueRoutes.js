@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const venueController = require('../controllers/venuecontroller');
+const venueController = require('../controllers/venueController');
 const { authorize } = require('../middleware/authmiddleware');
 const multer = require('multer');
 const path = require('path');
@@ -74,7 +74,7 @@ router.post('/',
 
 // Consolidate update venue route
 router.put('/:id',
-    authorize('superadmin'),  // Added authorization
+    authorize(['venue_admin', 'admin', 'superadmin']),  // Added authorization
     upload.single('image'),
     (req, res, next) => {
         if (req.file) {

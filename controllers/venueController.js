@@ -1,13 +1,15 @@
 const Venue = require('../models/Venue');
-const Event = require('../models/event');
+const Event = require('../models/Event');
 const Category = require('../models/Category');
-const Screen = require('../models/Screen'); // Add this import
+const Screen = require('../models/Screen');
+const Seat = require('../models/Seat'); // Add this import
 const { Op } = require('sequelize');
 const path = require('path');
+const SeatCategory = require('../models/SeatCategory');
 
 // Get all venues
 const getVenues = async (req, res) => {
-  console.log(req.user);
+  // console.log(req.user);
   try {
     const venues = await Venue.findAll({
       attributes: ['venue_id', 'name', 'address', 'capacity', 'description', 'image_url', 'images'],
@@ -20,18 +22,20 @@ const getVenues = async (req, res) => {
         ],
         include: [{
           model: Screen,
-          as: 'screen',
+          as: 'eventScreen',
           attributes: ['screen_id', 'name', 'capacity']
         }]
       }]
     });
     res.status(200).json(venues);
   } catch (error) {
+    console.error('Error fetching venues:', error);
     res.status(500).json({ message: error.message });
   }
 };
 
 // Get single venue
+// Update getVenue function
 const getVenue = async (req, res) => {
   try {
     const venue = await Venue.findByPk(req.params.id, {
@@ -46,7 +50,7 @@ const getVenue = async (req, res) => {
         }]
       }],
       attributes: {
-        include: ['venue_id', 'name', 'address', 'location', 'capacity', 'description', 'image_url', 'images'],
+        include: ['venue_id', 'name', 'address', 'city', 'capacity', 'description', 'image_url', 'images'],
         exclude: ['createdAt', 'updatedAt']
       }
     });
@@ -75,56 +79,88 @@ const getVenue = async (req, res) => {
 const createVenue = async (req, res) => {
   try {
     const { screens, ...venueData } = req.body;
+    console.log('Received venue data:', venueData);
+    console.log('Received screens data:', screens);
 
-    // Set default capacity as sum of all screen capacities
-    venueData.capacity = screens.reduce((total, screen) => total + screen.capacity, 0);
+    // Create venue
+    const venue = await Venue.create({
+      ...venueData,
+      status: 'active'
+    });
 
-    if (req.file) {
-      venueData.image_url = `/uploads/venues/${req.file.filename}`;
-    }
+    console.log('Received screens data:', screens);
+    // Process screens and their seat categories
+    if (screens && Array.isArray(JSON.parse(screens))) {
+      for (const screenData of JSON.parse(screens)) {
+        console.log('Processing screen:', screenData);
+        const { seatCategories, ...screenDetails } = screenData;
 
-    if (req.files && req.files.length > 0) {
-      venueData.images = req.files.map(file => `/uploads/venues/${file.filename}`);
-    }
-    // Add admin_id from authenticated user
-    venueData.admin_id = req.user.user_id;
-    // Create venue with transaction to ensure data consistency
-    const venue = await Venue.create(venueData);
-    // Create screens for the venue
-    if (screens && Array.isArray(screens)) {
-      const createdScreens = await Promise.all(screens.map(screenData =>
-        Screen.create({
-          venue_id: venue.venue_id,
-          name: screenData.name.trim(),
+        // Create screen with proper venue association
+        const screen = await Screen.create({
+          name: screenData.name,
           capacity: screenData.capacity,
           rows: screenData.rows,
           seats_per_row: screenData.seats_per_row,
-          base_price: screenData.base_price || 0,
+          venue_id: venue.venue_id,
           status: 'active'
-        })
-      ));
-      const venueWithScreens = await Venue.findByPk(venue.venue_id, {
-        include: [{
-          model: Screen,
-          as: 'screens',
-          attributes: ['screen_id', 'name', 'capacity', 'rows', 'seats_per_row', 'base_price', 'status']
-        }]
-      });
-      res.status(201).json({
-        success: true,
-        message: 'Venue and screens created successfully',
-        data: venueWithScreens
-      });
+        });
+
+        console.log('Created screen:', screen.screen_id);
+
+        // Create seat categories for the screen
+        if (seatCategories && Array.isArray(seatCategories)) {
+          console.log('Processing seat categories:', seatCategories);
+          for (const category of seatCategories) {
+            await SeatCategory.create({
+              name: category.name,
+              price_multiplier: category.price_multiplier,
+              rows_from: category.rows_from,
+              rows_to: category.rows_to,
+              seats_per_row: screenData.seats_per_row, // Use screen's seats_per_row
+              position: category.position,
+              screen_id: screen.screen_id
+            });
+          }
+        }
+
+        // Create seats for the screen
+        const seats = [];
+        for (let row = 1; row <= screenData.rows; row++) {
+          for (let seat = 1; seat <= screenData.seats_per_row; seat++) {
+            seats.push({
+              screen_id: screen.screen_id,
+              row_number: row,
+              seat_number: seat,
+              status: 'available'
+            });
+          }
+        }
+        await Seat.bulkCreate(seats);
+        console.log('Created seats:', seats.length);
+      }
     }
+
+    // Fetch created venue with all related data
+    const createdVenue = await Venue.findByPk(venue.venue_id, {
+      include: [{
+        model: Screen,
+        as: 'screens',
+        include: [{
+          model: SeatCategory,
+          as: 'seatCategories'
+        }, {
+          model: Seat,
+          as: 'screenSeats' // Updated to match the model alias
+        }]
+      }]
+    });
+
+    res.status(201).json(createdVenue);
   } catch (error) {
     console.error('Error creating venue:', error);
-    return res.status(400).json({
-      success: false,
-      message: error.message
-    });
+    res.status(500).json({ message: error.message });
   }
 };
-
 // Update venue
 const updateVenue = async (req, res) => {
   try {
@@ -223,29 +259,20 @@ const getVenuesWithFilters = async (req, res) => {
 const getVenuesWithEvents = async (req, res) => {
   try {
     const venues = await Venue.findAll({
+      attributes: ['venue_id', 'name', 'address', 'capacity', 'description', 'image_url', 'images'],
       include: [
+        {
+          model: Screen,
+          as: 'screens',
+          attributes: ['screen_id', 'name', 'capacity']
+        },
         {
           model: Event,
           as: 'events',
-          include: [
-            {
-              model: Venue,
-              as: 'venue'
-            },
-            {
-              model: Screen,
-              as: 'screen'
-            }
-          ],
           attributes: [
-            'event_id', 'venue_id', 'event_name',
-            'category_id', 'event_date', 'ticket_price',
-            'available_seats', 'image_url', 'images'
+            'event_id', 'event_name', 'event_date',
+            'ticket_price', 'available_seats', 'image_url'
           ]
-        },
-        {
-          model: Screen,
-          as: 'screens'
         }
       ]
     });

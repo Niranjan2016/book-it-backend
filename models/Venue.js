@@ -34,7 +34,7 @@ Venue.init({
     allowNull: true
   },
   images: {
-    type: DataTypes.JSON,  // Add this field for multiple images
+    type: DataTypes.JSON,
     allowNull: true
   }
 }, {

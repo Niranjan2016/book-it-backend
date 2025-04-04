@@ -1,6 +1,6 @@
 const User = require('./User');
 const Venue = require('./Venue');
-const Event = require('./event');
+const Event = require('./Event');
 const Category = require('./Category');
 const Screen = require('./Screen');
 const Seat = require('./Seat');
@@ -10,19 +10,10 @@ const Payment = require('./Payment');
 const ShowTime = require('./ShowTime');
 
 // Define associations
+// Venue associations
 Venue.hasMany(Screen, {
     foreignKey: 'venue_id',
     as: 'screens'
-});
-
-Screen.belongsTo(Venue, {
-    foreignKey: 'venue_id',
-    as: 'venue'
-});
-
-Event.belongsTo(Venue, {
-    foreignKey: 'venue_id',
-    as: 'venue'
 });
 
 Venue.hasMany(Event, {
@@ -30,19 +21,47 @@ Venue.hasMany(Event, {
     as: 'events'
 });
 
+// Screen associations
+Screen.belongsTo(Venue, {
+    foreignKey: 'venue_id',
+    as: 'venue'
+});
+
+
+// Event associations
+Event.belongsTo(Venue, {
+    foreignKey: 'venue_id',
+    as: 'venue'
+});
+
+// Update Category-Event associations
 Category.hasMany(Event, {
-    foreignKey: 'category_id',
-    as: 'events'
+    foreignKey: {
+        name: 'category_id',
+        allowNull: false
+    },
+    as: 'events',
+    onDelete: 'CASCADE'
 });
 
 Event.belongsTo(Category, {
-    foreignKey: 'category_id',
-    as: 'category'
+    foreignKey: {
+        name: 'category_id',
+        allowNull: false
+    },
+    as: 'category',
+    onDelete: 'CASCADE'
 });
 
+// Event-Screen association
 Event.belongsTo(Screen, {
     foreignKey: 'screen_id',
-    as: 'screen'
+    as: 'eventScreen'
+});
+
+Screen.hasMany(Event, {
+    foreignKey: 'screen_id',
+    as: 'events'
 });
 
 Screen.hasMany(Seat, {

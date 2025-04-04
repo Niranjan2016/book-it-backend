@@ -1,143 +1,140 @@
 const User = require('../models/User');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken'); // Add this import
+const { Op } = require('sequelize');
 
-// Get all users
-exports.getUsers = async (req, res) => {
+// Admin functions
+const getUsers = async (req, res) => {
   try {
     const users = await User.findAll({
-      attributes: { exclude: ['password_hash'] }
+      attributes: ['user_id', 'full_name', 'email', 'phone', 'role', 'managed_venue_id'],
+      order: [['created_at', 'DESC']]
     });
     res.status(200).json(users);
   } catch (error) {
+    console.error('Error fetching users:', error);
     res.status(500).json({ message: error.message });
   }
 };
 
-// Get single user
-exports.getUser = async (req, res) => {
+const getUser = async (req, res) => {
   try {
     const user = await User.findByPk(req.params.id, {
-      attributes: { exclude: ['password_hash'] }
+      attributes: ['user_id', 'full_name', 'email', 'phone', 'role', 'managed_venue_id']
     });
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
     res.status(200).json(user);
   } catch (error) {
+    console.error('Error fetching user:', error);
     res.status(500).json({ message: error.message });
   }
 };
 
-// Create new user
-exports.createUser = async (req, res) => {
+const createUser = async (req, res) => {
   try {
     const user = await User.create(req.body);
-    const userResponse = await User.findByPk(user.user_id, {
-      attributes: { exclude: ['password_hash'] }
-    });
-    res.status(201).json(userResponse);
+    res.status(201).json(user);
   } catch (error) {
-    res.status(400).json({ message: error.message });
+    console.error('Error creating user:', error);
+    res.status(500).json({ message: error.message });
   }
 };
 
-// Update user
-exports.updateUser = async (req, res) => {
+const updateUser = async (req, res) => {
   try {
     const user = await User.findByPk(req.params.id);
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
     await user.update(req.body);
-    const updatedUser = await User.findByPk(req.params.id, {
-      attributes: { exclude: ['password_hash'] }
-    });
-    res.status(200).json(updatedUser);
+    res.status(200).json(user);
   } catch (error) {
-    res.status(400).json({ message: error.message });
+    console.error('Error updating user:', error);
+    res.status(500).json({ message: error.message });
   }
 };
 
-// Delete user
-exports.deleteUser = async (req, res) => {
+const deleteUser = async (req, res) => {
   try {
     const user = await User.findByPk(req.params.id);
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
     await user.destroy();
-    res.status(200).json({ message: 'User deleted successfully' });
+    res.status(204).send();
   } catch (error) {
+    console.error('Error deleting user:', error);
     res.status(500).json({ message: error.message });
   }
 };
 
 // Register new user
 exports.register = async (req, res) => {
-    try {
-        const { email, password, name } = req.body;
-        // TODO: Add password hashing
-        const user = await User.create({
-            email,
-            password,
-            name
-        });
-        res.status(201).json({ message: 'User registered successfully', user });
-    } catch (error) {
-        res.status(400).json({ message: error.message });
-    }
+  try {
+    const { email, password, name } = req.body;
+    // TODO: Add password hashing
+    const user = await User.create({
+      email,
+      password,
+      name
+    });
+    res.status(201).json({ message: 'User registered successfully', user });
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
 };
 
 // Login user
 exports.login = async (req, res) => {
-    try {
-        const { email, password } = req.body;
-        console.log('Login attempt for:', email);
+  try {
+    const { email, password } = req.body;
+    console.log('Login attempt for:', email);
 
-        const user = await User.findOne({ 
-            where: { email },
-            attributes: ['user_id', 'email', 'password_hash', 'full_name', 'role', 'managed_venue_id'] 
-        });
+    const user = await User.findOne({
+      where: { email },
+      attributes: ['user_id', 'email', 'password_hash', 'full_name', 'role', 'managed_venue_id']
+    });
 
-        if (!user) {
-            return res.status(401).json({ message: 'Invalid credentials' });
-        }
-
-        const isValidPassword = await bcrypt.compare(password, user.password_hash);
-        if (!isValidPassword) {
-            return res.status(401).json({ message: 'Invalid credentials' });
-        }
-
-        // Generate JWT token with correct payload structure
-        const token = jwt.sign(
-            { 
-                userId: user.user_id,
-                email: user.email,
-                role: user.role,
-                managedVenueId: user.managed_venue_id
-            },
-            process.env.JWT_SECRET,
-            { expiresIn: '24h' }
-        );
-
-        console.log('Generated token:', token);
-
-        res.status(200).json({
-            message: 'Login successful',
-            user: {
-                id: user.user_id,
-                email: user.email,
-                name: user.full_name,
-                role: user.role,
-                managedVenueId: user.managed_venue_id
-            },
-            token
-        });
-    } catch (error) {
-        console.error('Login error:', error);
-        res.status(500).json({ message: error.message });
+    if (!user) {
+      return res.status(401).json({ message: 'Invalid credentials' });
     }
+
+    const isValidPassword = await bcrypt.compare(password, user.password_hash);
+    if (!isValidPassword) {
+      return res.status(401).json({ message: 'Invalid credentials' });
+    }
+
+    // Generate JWT token with correct payload structure
+    const token = jwt.sign(
+      {
+        userId: user.user_id,
+        email: user.email,
+        role: user.role,
+        managedVenueId: user.managed_venue_id
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    console.log('Generated token:', token);
+
+    res.status(200).json({
+      message: 'Login successful',
+      user: {
+        id: user.user_id,
+        email: user.email,
+        name: user.full_name,
+        role: user.role,
+        managedVenueId: user.managed_venue_id
+      },
+      token
+    });
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ message: error.message });
+  }
 };
 
 // Get user profile
@@ -187,4 +184,81 @@ exports.updateProfile = async (req, res) => {
   } catch (error) {
     res.status(400).json({ message: error.message });
   }
+};
+
+const getVenueUsers = async (req, res) => {
+  try {
+    if (!req.user.managed_venue_id) {
+      return res.status(400).json({ message: 'No managed venue found' });
+    }
+
+    const venueUsers = await User.findAll({
+      where: {
+        managed_venue_id: req.user.managed_venue_id,
+        role: { [Op.in]: ['venue_admin', 'venue_employee'] },
+        user_id: { [Op.ne]: req.user.user_id }  // Exclude current user
+      },
+      attributes: ['user_id', 'full_name', 'email', 'phone', 'managed_venue_id', 'role', 'createdAt'],
+      order: [['user_id', 'DESC']]
+    });
+
+    res.status(200).json(venueUsers);
+  } catch (error) {
+    console.error('Error fetching venue users:', error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+const createVenueAdmin = async (req, res) => {
+  try {
+    const { email, password, full_name, phone } = req.body;
+
+    // Validate required fields
+    if (!email || !password || !full_name) {
+      return res.status(400).json({
+        message: 'Missing required fields',
+        required: ['email', 'password', 'full_name']
+      });
+    }
+
+    // Hash password
+    const salt = await bcrypt.genSalt(10);
+    const password_hash = await bcrypt.hash(password, salt);
+
+    const venueAdmin = await User.create({
+      email,
+      password_hash,
+      full_name,
+      phone: phone || null,
+      role: 'venue_admin',
+      managed_venue_id: req.user.managed_venue_id  // Get venue ID from logged-in admin
+    });
+
+    res.status(201).json({
+      message: 'Venue admin created successfully',
+      user: {
+        user_id: venueAdmin.user_id,
+        email: venueAdmin.email,
+        full_name: venueAdmin.full_name,
+        phone: venueAdmin.phone,
+        managed_venue_id: venueAdmin.managed_venue_id
+      }
+    });
+  } catch (error) {
+    console.error('Error creating venue admin:', error);
+    res.status(500).json({
+      message: 'Error creating venue admin',
+      error: error.message
+    });
+  }
+};
+
+// Add to module.exports
+module.exports = {
+  getUsers,
+  getUser,
+  createUser,
+  updateUser,
+  deleteUser,
+  getVenueUsers, createVenueAdmin
 };

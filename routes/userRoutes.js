@@ -9,21 +9,25 @@ const {
     register,
     login,
     getProfile,
-    updateProfile
-} = require('../controllers/usercontroller');
+    updateProfile,
+    getVenueUsers,  // Add this import
+    createVenueAdmin
+} = require('../controllers/userController'); // Make sure the filename case matches exactly
 const { authorize } = require('../middleware/authmiddleware');
 
 // Public routes
-router.post('/register', register);
+// router.post('/register', register);
 
-router.post('/login', login);
+// router.post('/login', login);
 
 // Protected routes
-router.get('/profile', authorize('user', 'venue_admin', 'superadmin'), getProfile);
+// router.get('/profile', authorize('user', 'venue_admin', 'superadmin'), getProfile);
 
-router.put('/profile', authorize('user', 'venue_admin', 'superadmin'), updateProfile);
+// router.put('/profile', authorize('user', 'venue_admin', 'superadmin'), updateProfile);
 
-router.put('/profile', authorize('user', 'venue_admin', 'superadmin'), updateProfile);
+// Venue admin routes
+router.get('/venue-users', authorize('venue_admin'), getVenueUsers);
+router.post('/create-venue-admin', authorize('venue_admin'), createVenueAdmin);
 
 // Admin routes
 router.get('/', authorize('superadmin'), getUsers);

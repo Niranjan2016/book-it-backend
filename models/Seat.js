@@ -16,7 +16,7 @@ const Seat = sequelize.define('Seat', {
     }
   },
   row_number: {  // Added row_number field
-    type: DataTypes.INTEGER,
+    type: DataTypes.STRING(2), // Changed from INTEGER to STRING
     allowNull: false
   },
   seat_number: {
