@@ -74,7 +74,7 @@ router.post('/',
 
 // Consolidate update venue route
 router.put('/:id',
-    authorize('superadmin'),  // Added authorization
+    authorize(['venue_admin', 'admin', 'superadmin']),  // Added authorization
     upload.single('image'),
     (req, res, next) => {
         if (req.file) {

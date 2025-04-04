@@ -243,7 +243,14 @@ const createEvent = async (req, res) => {
 // Update getEvents function
 const getEvents = async (req, res) => {
     try {
+        const currentDate = new Date();
+
         const events = await Event.findAll({
+            where: {
+                event_date: {
+                    [Op.gte]: currentDate
+                }
+            },
             include: [
                 {
                     model: Category,
@@ -263,6 +270,11 @@ const getEvents = async (req, res) => {
                 {
                     model: ShowTime,
                     as: 'showTimes',
+                    where: {
+                        show_date: {
+                            [Op.gte]: currentDate
+                        }
+                    },
                     attributes: ['showtime_id', 'show_date', 'start_time', 'available_seats']
                 }
             ],
@@ -273,6 +285,11 @@ const getEvents = async (req, res) => {
                 'ticket_price',
                 'available_seats',
                 'image_url'
+            ],
+            order: [
+                ['event_date', 'ASC'],
+                [{ model: ShowTime, as: 'showTimes' }, 'show_date', 'ASC'],
+                [{ model: ShowTime, as: 'showTimes' }, 'start_time', 'ASC']
             ]
         });
         res.status(200).json(events);
@@ -421,7 +438,7 @@ async function getShowTimeSeats(req, res) {
         sortedCategories.forEach(category => {
             const categoryRows = [];
             const rowCount = category.rows_to - category.rows_from + 1;
-            
+
             for (let row = 0; row < rowCount; row++) {
                 const rowSeats = [];
                 const actualSeatsInRow = Math.min(

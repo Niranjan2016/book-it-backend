@@ -36,6 +36,7 @@ const venueRoutes = require('./routes/venueroutes');
 const eventRoutes = require('./routes/eventroutes');
 const seatRoutes = require('./routes/seatroutes');
 const bookingRoutes = require('./routes/bookingroutes');
+const orderRoutes = require('./routes/orderRoutes');
 
 // Register API routes
 app.use('/api/auth', authRoutes);
@@ -43,6 +44,7 @@ app.use('/api/venues', venueRoutes);
 app.use('/api/events', eventRoutes);
 app.use('/api/seats', seatRoutes);
 app.use('/api/bookings', bookingRoutes);
+app.use('/api/orders', orderRoutes);
 
 // Simple logging middleware
 app.use((req, res, next) => {
