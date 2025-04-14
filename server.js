@@ -86,7 +86,9 @@ app.get('/test', (req, res) => {
 // API Routes
 app.use('/api/contact', require(path.join(__dirname, 'routes/contactRoutes')));
 app.use('/api/auth', require(path.join(__dirname, 'routes/authRoutes')));
-app.use('/api/users', require(path.join(__dirname, 'routes/userRoutes')));
+// Import routes
+const userRoutes = require('./routes/userRoutes');
+app.use('/api/users', userRoutes);
 app.use('/api/venues', require(path.join(__dirname, 'routes/venueRoutes')));
 app.use('/api/seats', require(path.join(__dirname, 'routes/seatRoutes')));
 app.use('/api/reviews', require(path.join(__dirname, 'routes/reviewRoutes')));

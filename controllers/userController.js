@@ -6,11 +6,33 @@ const { Op } = require('sequelize');
 // Admin functions
 const getUsers = async (req, res) => {
   try {
-    const users = await User.findAll({
-      attributes: ['user_id', 'full_name', 'email', 'phone', 'role', 'managed_venue_id'],
-      order: [['created_at', 'DESC']]
+    const { role, page = 1, limit = 10, search } = req.query;  // Add search parameter
+    const whereClause = {
+      ...(role && { role }),
+      ...(search && {
+        full_name: {
+          [Op.like]: `%${search}%`  // Case-insensitive search
+        }
+      })
+    };
+    const offset = (page - 1) * limit;
+
+    const { count, rows: users } = await User.findAndCountAll({
+      where: whereClause,
+      attributes: ['user_id', 'full_name', 'email', 'phone', 'role', 'managed_venue_id', 'createdAt'],
+      order: [['createdAt', 'DESC']],
+      offset: Number(offset),
+      limit: Number(limit),
+      logging: (sql) => console.log('Generated SQL:', sql)
     });
-    res.status(200).json(users);
+
+    res.status(200).json({
+      users,
+      currentPage: Number(page),
+      totalPages: Math.ceil(count / limit),
+      totalItems: count,
+      itemsPerPage: Number(limit),
+    });
   } catch (error) {
     console.error('Error fetching users:', error);
     res.status(500).json({ message: error.message });
@@ -192,17 +214,36 @@ const getVenueUsers = async (req, res) => {
       return res.status(400).json({ message: 'No managed venue found' });
     }
 
-    const venueUsers = await User.findAll({
-      where: {
-        managed_venue_id: req.user.managed_venue_id,
-        role: { [Op.in]: ['venue_admin', 'venue_employee'] },
-        user_id: { [Op.ne]: req.user.user_id }  // Exclude current user
-      },
+    const { page = 1, limit = 10, search } = req.query;
+    const offset = (page - 1) * limit;
+
+    const whereClause = {
+      managed_venue_id: req.user.managed_venue_id,
+      role: { [Op.in]: ['venue_admin', 'venue_employee'] },
+      user_id: { [Op.ne]: req.user.user_id },
+      ...(search && {
+        full_name: {
+          [Op.like]: `%${search}%`  // Case-insensitive search
+        }
+      })
+    };
+
+    const { count, rows: venueUsers } = await User.findAndCountAll({
+      where: whereClause,
       attributes: ['user_id', 'full_name', 'email', 'phone', 'managed_venue_id', 'role', 'createdAt'],
-      order: [['user_id', 'DESC']]
+      order: [['user_id', 'DESC']],
+      offset: Number(offset),
+      limit: Number(limit),
+      logging: console.log
     });
 
-    res.status(200).json(venueUsers);
+    res.status(200).json({
+      users: venueUsers,
+      currentPage: Number(page),
+      totalPages: Math.ceil(count / limit),
+      totalItems: count,
+      itemsPerPage: Number(limit)
+    });
   } catch (error) {
     console.error('Error fetching venue users:', error);
     res.status(500).json({ message: error.message });
@@ -211,7 +252,7 @@ const getVenueUsers = async (req, res) => {
 
 const createVenueAdmin = async (req, res) => {
   try {
-    const { email, password, full_name, phone } = req.body;
+    const { email, password, full_name, phone, role, venue_id } = req.body;
 
     // Validate required fields
     if (!email || !password || !full_name) {
@@ -225,14 +266,20 @@ const createVenueAdmin = async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const password_hash = await bcrypt.hash(password, salt);
 
-    const venueAdmin = await User.create({
+    const userData = {
       email,
       password_hash,
       full_name,
       phone: phone || null,
-      role: 'venue_admin',
-      managed_venue_id: req.user.managed_venue_id  // Get venue ID from logged-in admin
-    });
+      role: role || 'venue_admin',
+      managed_venue_id: venue_id  // Get venue ID from logged-in admin
+    };
+
+    if (role !== 'user' && venue_id === null) {
+      userData.managed_venue_id = req.user.managed_venue_id;
+    }
+
+    const venueAdmin = await User.create(userData);
 
     res.status(201).json({
       message: 'Venue admin created successfully',
